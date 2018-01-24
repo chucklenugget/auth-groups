@@ -8,11 +8,7 @@
     abstract class ManagedEntity
     {
       public BaseEntity Entity { get; }
-
-      public uint Id
-      {
-        get { return Entity.net.ID; }
-      }
+      public uint Id { get; }
 
       public abstract void Authorize(BasePlayer player);
       public abstract void Authorize(IEnumerable<BasePlayer> players);
@@ -52,6 +48,7 @@
       protected ManagedEntity(BaseEntity entity)
       {
         Entity = entity;
+        Id = entity.net.ID;
       }
 
       protected ProtoBuf.PlayerNameID CreateAuthListEntry(BasePlayer player, bool shouldPool = true)
