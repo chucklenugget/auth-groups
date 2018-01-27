@@ -13,7 +13,7 @@
       }
 
       group.SynchronizeAll();
-      SendReply(player, Messages.GroupSynchronized, group.Name, group.Members.Count);
+      SendReply(player, Messages.GroupSynchronized, group.Name, group.MemberIds.Count);
     }
   }
 }

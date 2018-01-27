@@ -4,7 +4,7 @@
   {
     void OnAuthGroupCancelCommand(BasePlayer player)
     {
-      if (PendingInteractions.Remove(player.userID))
+      if (PendingInteractions.Remove(player.UserIDString))
         SendReply(player, Messages.InteractionCanceled);
       else
         OnAuthGroupHelpCommand(player);

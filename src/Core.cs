@@ -6,19 +6,23 @@
   using Oxide.Core.Configuration;
   using UnityEngine;
 
-  [Info("AuthGroups", "chucklenugget", "0.2.0")]
+  [Info("AuthGroups", "chucklenugget", "0.3.0")]
   public partial class AuthGroups : RustPlugin
   {
+    static AuthGroups Instance;
+
     const string FAILURE_EFFECT = "assets/prefabs/locks/keypad/effects/lock.code.denied.prefab";
 
     DynamicConfigFile DataFile;
     AuthGroupManager Groups;
-    Dictionary<ulong, Interaction> PendingInteractions = new Dictionary<ulong, Interaction>();
+    Dictionary<string, Interaction> PendingInteractions;
 
     void Init()
     {
+      Instance = this;
       DataFile = Interface.Oxide.DataFileSystem.GetFile("AuthGroups");
-      Groups = new GameObject().AddComponent<AuthGroupManager>();
+      Groups = new AuthGroupManager();
+      PendingInteractions = new Dictionary<string, Interaction>();
     }
 
     void OnServerInitialized()
@@ -36,7 +40,7 @@
         PrintWarning("Couldn't load data, defaulting to empty list of groups.");
       }
 
-      Groups.Init(this, infos);
+      Groups.Init(infos);
     }
 
     void OnServerSave()
@@ -44,12 +48,20 @@
       DataFile.WriteObject(Groups.Serialize());
     }
 
+    void OnPlayerSleepEnded(BasePlayer player)
+    {
+      foreach (AuthGroup group in Groups.GetAllByMember(player))
+        group.EnsureAuthorized(player);
+    }
+
     void OnHammerHit(BasePlayer player, HitInfo hit)
     {
-      Interaction interaction;
+      if (player == null || hit == null || hit.HitEntity == null)
+        return;
 
-      if (PendingInteractions.TryGetValue(player.userID, out interaction))
-        interaction.TryComplete(hit);
+      Interaction interaction;
+      if (PendingInteractions.TryGetValue(player.UserIDString, out interaction))
+        interaction.Handle(hit);
     }
 
     void OnEntityKill(BaseNetworkable networkable)
@@ -62,7 +74,7 @@
       foreach (AuthGroup group in Groups.GetAllByEntity(entity))
       {
         group.RemoveEntity(entity);
-        Puts($"Managed entity {entity.net.ID} was removed from auth group {group.Name} of player {group.Owner.net.ID} since it was destroyed.");
+        Puts($"Managed entity {entity.net.ID} was removed from auth group {group.Name} of player {group.OwnerId} since it was destroyed.");
       }
     }
 
@@ -126,6 +138,12 @@
     void PlayEffectAtEntity(BaseEntity entity, string effectPrefab)
     {
       Effect.server.Run(effectPrefab, entity, 0, Vector3.zero, Vector3.forward);
+    }
+
+    string FormatPlayerName(string playerId)
+    {
+      BasePlayer player = BasePlayer.Find(playerId);
+      return (player == null) ? playerId : player.displayName;
     }
   }
 }

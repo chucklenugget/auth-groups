@@ -9,7 +9,7 @@
     {
       if (args.Length == 0)
       {
-        if (PendingInteractions.ContainsKey(player.userID))
+        if (PendingInteractions.ContainsKey(player.UserIDString))
           OnAuthGroupCancelCommand(player);
         else
           OnAuthGroupListCommand(player);

@@ -3,36 +3,24 @@
   using System;
   using System.Collections.Generic;
   using System.Linq;
-  using UnityEngine;
 
   public partial class AuthGroups : RustPlugin
   {
-    class AuthGroupManager : MonoBehaviour
+    class AuthGroupManager
     {
-      AuthGroups Core;
       List<AuthGroup> Groups = new List<AuthGroup>();
 
-      public void Init(AuthGroups core, IEnumerable<AuthGroupInfo> infos)
+      public void Init(IEnumerable<AuthGroupInfo> infos)
       {
-        Core = core;
-
         foreach (AuthGroupInfo info in infos)
         {
-          BasePlayer owner = BasePlayerEx.FindById(info.OwnerId);
-
-          if (owner == null)
-          {
-            Core.PrintWarning($"Couldn't find owner {info.OwnerId} for auth group! Ignoring.");
-            continue;
-          }
-
           Groups.Add(new AuthGroup {
             Name = info.Name,
-            Owner = owner,
+            OwnerId = info.OwnerId,
             Flags = info.Flags,
-            Members = FindPlayers(info.MemberIds).ToList(),
-            Managers = FindPlayers(info.ManagerIds).ToList(),
-            Entities = FindEntities(info.EntityIds).Select(ManagedEntity.Create).ToList()
+            MemberIds = new HashSet<string>(info.MemberIds),
+            ManagerIds = new HashSet<string>(info.ManagerIds),
+            Entities = new HashSet<ManagedEntity>(FindEntities(info.EntityIds).Select(ManagedEntity.Create))
           });
         }
       }
@@ -79,24 +67,9 @@
         return Groups.Select(group => group.Serialize()).ToArray();
       }
 
-      IEnumerable<BasePlayer> FindPlayers(IEnumerable<string> ids)
-      {
-        return ids.Select(FindPlayer).Where(player => player != null);
-      }
-
       IEnumerable<BaseEntity> FindEntities(IEnumerable<uint> ids)
       {
         return ids.Select(FindEntity).Where(entity => entity != null);
-      }
-
-      BasePlayer FindPlayer(string id)
-      {
-        var player = BasePlayerEx.FindById(id);
-
-        if (player == null)
-          Core.PrintWarning($"Couldn't find player {id} for an auth group!");
-
-        return player;
       }
 
       BaseEntity FindEntity(uint id)
@@ -104,7 +77,7 @@
         var entity = BaseNetworkable.serverEntities.Find(id) as BaseEntity;
 
         if (entity == null)
-          Core.PrintWarning($"Couldn't find entity {id} for an auth group!");
+          Instance.PrintWarning($"Couldn't find entity {id} for an auth group!");
 
         return entity;
       }

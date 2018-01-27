@@ -4,40 +4,35 @@
   {
     class AddEntityToGroup : Interaction
     {
-      public AddEntityToGroup(AuthGroups core, BasePlayer player, AuthGroup group)
-        : base(core, player, group)
+      public AddEntityToGroup(BasePlayer player, AuthGroup group)
+        : base(player, group)
       {
       }
 
-      public override bool TryComplete(HitInfo hit)
+      public override void Handle(HitInfo hit)
       {
-        if (hit == null || hit.HitEntity == null)
-          return false;
-
         if (Group.HasEntity(hit.HitEntity))
         {
-          Core.SendReply(Player, Messages.CannotAddEntityAlreadyEnrolledInGroup, Group.Name);
-          return false;
+          Instance.SendReply(Player, Messages.CannotAddEntityAlreadyEnrolledInGroup, Group.Name);
+          return;
         }
 
         var entity = ManagedEntity.Create(hit.HitEntity);
 
         if (entity == null)
         {
-          Core.SendReply(Player, Messages.InvalidEntitySelected);
-          return false;
+          Instance.SendReply(Player, Messages.InvalidEntitySelected);
+          return;
         }
 
         if (!entity.IsAuthorized(Player))
         {
-          Core.SendReply(Player, Messages.CannotAddEntityNotAuthorized);
-          return false;
+          Instance.SendReply(Player, Messages.CannotAddEntityNotAuthorized);
+          return;
         }
 
         Group.AddEntity(entity);
-        Core.SendReply(Player, Messages.EntityAdded, Group.Name, Group.Members.Count);
-
-        return true;
+        Instance.SendReply(Player, Messages.EntityAdded, Group.Name, Group.MemberIds.Count);
       }
     }
   }

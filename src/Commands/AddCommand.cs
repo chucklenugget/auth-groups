@@ -14,7 +14,7 @@
 
       if (args.Length == 0)
       {
-        PendingInteractions.Add(player.userID, new AddEntityToGroup(this, player, group));
+        PendingInteractions.Add(player.UserIDString, new AddEntityToGroup(player, group));
         SendReply(player, Messages.SelectEntityToAddToGroup, group.Name);
         return;
       }

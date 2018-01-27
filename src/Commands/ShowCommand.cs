@@ -37,16 +37,16 @@
       if (codeLocks.Length > 0)
         sb.AppendLine($"  <color=#ffd479>{codeLocks.Length}</color> code lock(s)");
 
-      sb.AppendLine($"Owner: {group.Owner.displayName}");
+      sb.AppendLine($"Owner: {FormatPlayerName(group.OwnerId)}");
 
-      if (group.Managers.Count > 0)
+      if (group.ManagerIds.Count > 0)
       {
-        sb.Append($"<color=#ffd479>{group.Managers.Count}</color> managers: ");
-        sb.AppendLine(String.Join(", ", group.Managers.Select(m => m.displayName).ToArray()));
+        sb.Append($"<color=#ffd479>{group.ManagerIds.Count}</color> managers: ");
+        sb.AppendLine(String.Join(", ", group.ManagerIds.Select(FormatPlayerName).ToArray()));
       }
 
-      sb.Append($"<color=#ffd479>{group.Members.Count}</color> members: ");
-      sb.AppendLine(String.Join(", ", group.Members.Select(m => m.displayName).ToArray()));
+      sb.Append($"<color=#ffd479>{group.MemberIds.Count}</color> members: ");
+      sb.AppendLine(String.Join(", ", group.MemberIds.Select(FormatPlayerName).ToArray()));
 
       SendReply(player, sb.ToString());
     }

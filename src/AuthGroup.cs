@@ -10,73 +10,91 @@
   {
     class AuthGroup
     {
-      public BasePlayer Owner;
       public string Name;
+      public string OwnerId;
+      public HashSet<string> MemberIds;
+      public HashSet<string> ManagerIds;
+      public HashSet<ManagedEntity> Entities;
       public AuthGroupFlag Flags;
-
-      public List<BasePlayer> Members;
-      public List<BasePlayer> Managers;
-      public List<ManagedEntity> Entities;
 
       public AuthGroup()
       {
-        Members = new List<BasePlayer>();
-        Managers = new List<BasePlayer>();
-        Entities = new List<ManagedEntity>();
+        Entities = new HashSet<ManagedEntity>();
       }
 
       public AuthGroup(BasePlayer owner, string name)
         : this()
       {
-        Owner = owner;
+        OwnerId = owner.UserIDString;
         Name = name;
-        Members.Add(owner);
       }
 
       public bool AddMember(BasePlayer player)
       {
-        if (HasMember(player))
+        return AddMember(player.UserIDString);
+      }
+
+      public bool AddMember(string playerId)
+      {
+        if (HasMember(playerId))
           return false;
 
-        Members.Add(player);
+        MemberIds.Add(playerId);
 
-        foreach (ManagedEntity entity in Entities.Where(entity => !entity.IsAuthorized(player)))
-          entity.Authorize(player);
+        BasePlayer player = BasePlayer.Find(playerId);
+        if (player != null)
+          EnsureAuthorized(player);
 
         return true;
       }
 
       public bool RemoveMember(BasePlayer player)
       {
-        if (HasOwner(player))
-          throw new InvalidOperationException($"Cannot remove player {player.net.ID} from auth group, since they are the owner");
+        return RemoveMember(player.UserIDString);
+      }
 
-        if (!HasMember(player))
+      public bool RemoveMember(string playerId)
+      {
+        if (HasOwner(playerId))
+          throw new InvalidOperationException($"Cannot remove player {playerId} from auth group, since they are the owner");
+
+        if (!HasMember(playerId))
           return false;
 
-        Members.RemoveAll(member => member.userID == player.userID);
-        Managers.RemoveAll(manager => manager.userID == player.userID);
+        MemberIds.Remove(playerId);
+        ManagerIds.Remove(playerId);
 
-        foreach (ManagedEntity entity in Entities)
-          entity.Deauthorize(player);
+        BasePlayer player = BasePlayer.Find(playerId);
+        if (player != null)
+          EnsureDeauthorized(player);
 
         return true;
       }
 
       public void Promote(BasePlayer player)
       {
-        if (!Members.Contains(player))
-          throw new InvalidOperationException($"Tried to promote player {player.userID} in group {Name} owned by {Owner.userID}, but they are not a member!");
+        Promote(player.UserIDString);
+      }
 
-        Managers.Add(player);
+      public void Promote(string playerId)
+      {
+        if (!MemberIds.Contains(playerId))
+          throw new InvalidOperationException($"Tried to promote player {playerId} in group {Name} owned by {OwnerId}, but they are not a member!");
+
+        ManagerIds.Add(playerId);
       }
 
       public void Demote(BasePlayer player)
       {
-        if (!Managers.Contains(player))
-          throw new InvalidOperationException($"Tried to demote player {player.userID} in group {Name} owned by {Owner.userID}, but they are not a manager!");
+        Demote(player.UserIDString);
+      }
 
-        Managers.Remove(player);
+      public void Demote(string playerId)
+      {
+        if (!ManagerIds.Contains(playerId))
+          throw new InvalidOperationException($"Tried to demote player {playerId} in group {Name} owned by {OwnerId}, but they are not a manager!");
+
+        ManagerIds.Remove(playerId);
       }
 
       public bool AddEntity(ManagedEntity entity)
@@ -87,7 +105,8 @@
         Entities.Add(entity);
 
         entity.DeauthorizeAll();
-        entity.Authorize(Members);
+        entity.Authorize(GetActiveAndSleepingMembers());
+
         return true;
       }
 
@@ -102,18 +121,30 @@
 
       public bool RemoveEntity(BaseEntity entity)
       {
-        ManagedEntity enrolled = GetManagedEntity(entity);
+        ManagedEntity managedEntity = GetManagedEntity(entity);
 
-        if (enrolled == null)
+        if (managedEntity == null)
           return false;
 
-        return RemoveEntity(enrolled);
+        return RemoveEntity(managedEntity);
+      }
+
+      public void EnsureAuthorized(BasePlayer player)
+      {
+        foreach (ManagedEntity entity in Entities.Where(entity => !entity.IsAuthorized(player)))
+          entity.Authorize(player);
+      }
+
+      public void EnsureDeauthorized(BasePlayer player)
+      {
+        foreach (ManagedEntity entity in Entities.Where(entity => entity.IsAuthorized(player)))
+          entity.Deauthorize(player);
       }
 
       public void SynchronizeAll()
       {
         foreach (ManagedEntity entity in Entities)
-          entity.SetAuthorizedPlayers(Members);
+          entity.SetAuthorizedPlayers(GetActiveAndSleepingMembers());
       }
 
       public void DeauthorizeAll()
@@ -127,31 +158,51 @@
         return Entities.FirstOrDefault(e => e.Id == entity.net.ID);
       }
 
+      public BasePlayer[] GetActiveAndSleepingMembers()
+      {
+        return MemberIds.Select(id => BasePlayer.Find(id)).Where(p => p != null).ToArray();
+      }
+
       public T[] GetAllManagedEntitiesOfType<T>() where T : ManagedEntity
       {
         return Entities.OfType<T>().ToArray();
+      }
+
+      public bool HasMember(BasePlayer basePlayer)
+      {
+        return HasMember(basePlayer.UserIDString);
+      }
+
+      public bool HasMember(string playerId)
+      {
+        return MemberIds.Contains(playerId);
+      }
+
+      public bool HasManager(BasePlayer basePlayer)
+      {
+        return HasManager(basePlayer.UserIDString);
+      }
+
+      public bool HasManager(string playerId)
+      {
+        return ManagerIds.Contains(playerId);
+      }
+
+      public bool HasOwner(BasePlayer basePlayer)
+      {
+        return HasOwner(basePlayer.UserIDString);
+      }
+
+      public bool HasOwner(string playerId)
+      {
+        return OwnerId == playerId;
       }
 
       public bool HasEntity(BaseEntity entity)
       {
         return GetManagedEntity(entity) != null;
       }
-
-      public bool HasOwner(BasePlayer player)
-      {
-        return Owner.userID == player.userID;
-      }
-
-      public bool HasManager(BasePlayer player)
-      {
-        return Managers.Any(manager => manager.userID == player.userID);
-      }
-
-      public bool HasMember(BasePlayer player)
-      {
-        return Members.Any(member => member.userID == player.userID);
-      }
-
+      
       public bool HasFlag(AuthGroupFlag flag)
       {
         return (Flags & flag) != 0;
@@ -171,10 +222,10 @@
       {
         return new AuthGroupInfo {
           Name = Name,
-          OwnerId = Owner.UserIDString,
+          OwnerId = OwnerId,
           Flags = Flags,
-          ManagerIds = Managers.Select(player => player.UserIDString).ToArray(),
-          MemberIds = Members.Select(player => player.UserIDString).ToArray(),
+          ManagerIds = ManagerIds.ToArray(),
+          MemberIds = MemberIds.ToArray(),
           EntityIds = Entities.Select(entity => entity.Id).ToArray()
         };
       }

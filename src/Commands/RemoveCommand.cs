@@ -14,7 +14,7 @@
 
       if (args.Length == 0)
       {
-        PendingInteractions.Add(player.userID, new RemoveEntityFromGroup(this, player, group));
+        PendingInteractions.Add(player.UserIDString, new RemoveEntityFromGroup(player, group));
         SendReply(player, Messages.SelectEntityToRemoveFromGroup, group.Name);
         return;
       }
