@@ -158,7 +158,7 @@
     <Compile Include="Commands\DeleteCommand.cs" />
     <Compile Include="Commands\CancelCommand.cs" />
     <Compile Include="Commands\CodeLocksCommand.cs" />
-    <Compile Include="Core.cs" />
+    <Compile Include="AuthGroups.cs" />
     <Compile Include="Entities\ManagedAutoTurret.cs" />
     <Compile Include="Entities\ManagedCodeLock.cs" />
     <Compile Include="Entities\ManagedEntity.cs" />
@@ -172,6 +172,7 @@
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>cd $(ProjectDir)
-copy Core.cs +AuthGroup.cs + AuthGroupManager.cs + BasePlayerEx.cs + Lang.cs + Commands\*.cs + Entities\*.cs + Interactions\*.cs C:\rustserver\oxide\plugins\AuthGroups.cs /y /b</PostBuildEvent>
+copy AuthGroups.cs +AuthGroup.cs + AuthGroupManager.cs + BasePlayerEx.cs + Lang.cs + Commands\*.cs + Entities\*.cs + Interactions\*.cs $(SolutionDir)build\AuthGroups.cs /y /b
+copy $(SolutionDir)build\AuthGroups.cs C:\rustserver\oxide\plugins</PostBuildEvent>
   </PropertyGroup>
 </Project>

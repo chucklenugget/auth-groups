@@ -19,6 +19,8 @@
 
       public AuthGroup()
       {
+        MemberIds = new HashSet<string>();
+        ManagerIds = new HashSet<string>();
         Entities = new HashSet<ManagedEntity>();
       }
 
@@ -71,30 +73,30 @@
         return true;
       }
 
-      public void Promote(BasePlayer player)
+      public bool Promote(BasePlayer player)
       {
-        Promote(player.UserIDString);
+        return Promote(player.UserIDString);
       }
 
-      public void Promote(string playerId)
+      public bool Promote(string playerId)
       {
         if (!MemberIds.Contains(playerId))
-          throw new InvalidOperationException($"Tried to promote player {playerId} in group {Name} owned by {OwnerId}, but they are not a member!");
+          throw new InvalidOperationException($"Cannot promote player {playerId} in group {Name} owned by {OwnerId}, since they are not a member");
 
-        ManagerIds.Add(playerId);
+        return ManagerIds.Add(playerId);
       }
 
-      public void Demote(BasePlayer player)
+      public bool Demote(BasePlayer player)
       {
-        Demote(player.UserIDString);
+        return Demote(player.UserIDString);
       }
 
-      public void Demote(string playerId)
+      public bool Demote(string playerId)
       {
-        if (!ManagerIds.Contains(playerId))
-          throw new InvalidOperationException($"Tried to demote player {playerId} in group {Name} owned by {OwnerId}, but they are not a manager!");
+        if (!MemberIds.Contains(playerId))
+          throw new InvalidOperationException($"Cannot demote player {playerId} in group {Name} owned by {OwnerId}, since they are not a member");
 
-        ManagerIds.Remove(playerId);
+        return ManagerIds.Remove(playerId);
       }
 
       public bool AddEntity(ManagedEntity entity)
