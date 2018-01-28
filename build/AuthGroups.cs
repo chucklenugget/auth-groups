@@ -1,5 +1,5 @@
 ﻿/*
- * Copyright (C) 2017
+ * Copyright (C) 2017 chucklenugget
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
  * associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -163,474 +163,6 @@ namespace Oxide.Plugins
     {
       BasePlayer player = BasePlayer.Find(playerId);
       return (player == null) ? playerId : player.displayName;
-    }
-  }
-}
-﻿namespace Oxide.Plugins
-{
-  using System;
-  using System.Collections.Generic;
-  using System.Linq;
-  using Newtonsoft.Json;
-  using Newtonsoft.Json.Converters;
-
-  public partial class AuthGroups : RustPlugin
-  {
-    class AuthGroup
-    {
-      public string Name;
-      public string OwnerId;
-      public HashSet<string> MemberIds;
-      public HashSet<string> ManagerIds;
-      public HashSet<ManagedEntity> Entities;
-      public AuthGroupFlag Flags;
-
-      public AuthGroup()
-      {
-        MemberIds = new HashSet<string>();
-        ManagerIds = new HashSet<string>();
-        Entities = new HashSet<ManagedEntity>();
-      }
-
-      public AuthGroup(BasePlayer owner, string name)
-        : this()
-      {
-        OwnerId = owner.UserIDString;
-        Name = name;
-      }
-
-      public bool AddMember(BasePlayer player)
-      {
-        return AddMember(player.UserIDString);
-      }
-
-      public bool AddMember(string playerId)
-      {
-        if (HasMember(playerId))
-          return false;
-
-        MemberIds.Add(playerId);
-
-        BasePlayer player = BasePlayer.Find(playerId);
-        if (player != null)
-          EnsureAuthorized(player);
-
-        return true;
-      }
-
-      public bool RemoveMember(BasePlayer player)
-      {
-        return RemoveMember(player.UserIDString);
-      }
-
-      public bool RemoveMember(string playerId)
-      {
-        if (HasOwner(playerId))
-          throw new InvalidOperationException($"Cannot remove player {playerId} from auth group, since they are the owner");
-
-        if (!HasMember(playerId))
-          return false;
-
-        MemberIds.Remove(playerId);
-        ManagerIds.Remove(playerId);
-
-        BasePlayer player = BasePlayer.Find(playerId);
-        if (player != null)
-          EnsureDeauthorized(player);
-
-        return true;
-      }
-
-      public bool Promote(BasePlayer player)
-      {
-        return Promote(player.UserIDString);
-      }
-
-      public bool Promote(string playerId)
-      {
-        if (!MemberIds.Contains(playerId))
-          throw new InvalidOperationException($"Cannot promote player {playerId} in group {Name} owned by {OwnerId}, since they are not a member");
-
-        return ManagerIds.Add(playerId);
-      }
-
-      public bool Demote(BasePlayer player)
-      {
-        return Demote(player.UserIDString);
-      }
-
-      public bool Demote(string playerId)
-      {
-        if (!MemberIds.Contains(playerId))
-          throw new InvalidOperationException($"Cannot demote player {playerId} in group {Name} owned by {OwnerId}, since they are not a member");
-
-        return ManagerIds.Remove(playerId);
-      }
-
-      public bool AddEntity(ManagedEntity entity)
-      {
-        if (Entities.Any(e => e.Id == entity.Id))
-          return false;
-
-        Entities.Add(entity);
-
-        entity.DeauthorizeAll();
-        entity.Authorize(GetActiveAndSleepingMembers());
-
-        return true;
-      }
-
-      public bool RemoveEntity(ManagedEntity entity)
-      {
-        if (!Entities.Remove(entity))
-          return false;
-
-        entity.DeauthorizeAll();
-        return true;
-      }
-
-      public bool RemoveEntity(BaseEntity entity)
-      {
-        ManagedEntity managedEntity = GetManagedEntity(entity);
-
-        if (managedEntity == null)
-          return false;
-
-        return RemoveEntity(managedEntity);
-      }
-
-      public void EnsureAuthorized(BasePlayer player)
-      {
-        foreach (ManagedEntity entity in Entities.Where(entity => !entity.IsAuthorized(player)))
-          entity.Authorize(player);
-      }
-
-      public void EnsureDeauthorized(BasePlayer player)
-      {
-        foreach (ManagedEntity entity in Entities.Where(entity => entity.IsAuthorized(player)))
-          entity.Deauthorize(player);
-      }
-
-      public void SynchronizeAll()
-      {
-        foreach (ManagedEntity entity in Entities)
-          entity.SetAuthorizedPlayers(GetActiveAndSleepingMembers());
-      }
-
-      public void DeauthorizeAll()
-      {
-        foreach (ManagedEntity entity in Entities)
-          entity.DeauthorizeAll();
-      }
-
-      public ManagedEntity GetManagedEntity(BaseEntity entity)
-      {
-        return Entities.FirstOrDefault(e => e.Id == entity.net.ID);
-      }
-
-      public BasePlayer[] GetActiveAndSleepingMembers()
-      {
-        return MemberIds.Select(id => BasePlayer.Find(id)).Where(p => p != null).ToArray();
-      }
-
-      public T[] GetAllManagedEntitiesOfType<T>() where T : ManagedEntity
-      {
-        return Entities.OfType<T>().ToArray();
-      }
-
-      public bool HasMember(BasePlayer basePlayer)
-      {
-        return HasMember(basePlayer.UserIDString);
-      }
-
-      public bool HasMember(string playerId)
-      {
-        return MemberIds.Contains(playerId);
-      }
-
-      public bool HasManager(BasePlayer basePlayer)
-      {
-        return HasManager(basePlayer.UserIDString);
-      }
-
-      public bool HasManager(string playerId)
-      {
-        return ManagerIds.Contains(playerId);
-      }
-
-      public bool HasOwner(BasePlayer basePlayer)
-      {
-        return HasOwner(basePlayer.UserIDString);
-      }
-
-      public bool HasOwner(string playerId)
-      {
-        return OwnerId == playerId;
-      }
-
-      public bool HasEntity(BaseEntity entity)
-      {
-        return GetManagedEntity(entity) != null;
-      }
-      
-      public bool HasFlag(AuthGroupFlag flag)
-      {
-        return (Flags & flag) != 0;
-      }
-
-      public void AddFlag(AuthGroupFlag flag)
-      {
-        Flags |= flag;
-      }
-
-      public void RemoveFlag(AuthGroupFlag flag)
-      {
-        Flags &= ~flag;
-      }
-
-      public AuthGroupInfo Serialize()
-      {
-        return new AuthGroupInfo {
-          Name = Name,
-          OwnerId = OwnerId,
-          Flags = Flags,
-          ManagerIds = ManagerIds.ToArray(),
-          MemberIds = MemberIds.ToArray(),
-          EntityIds = Entities.Select(entity => entity.Id).ToArray()
-        };
-      }
-    }
-
-    public class AuthGroupInfo
-    {
-      [JsonProperty("name")]
-      public string Name;
-
-      [JsonProperty("ownerId")]
-      public string OwnerId;
-
-      [JsonProperty("flags"), JsonConverter(typeof(StringEnumConverter))]
-      public AuthGroupFlag Flags;
-
-      [JsonProperty("memberIds")]
-      public string[] MemberIds;
-
-      [JsonProperty("managerIds")]
-      public string[] ManagerIds;
-
-      [JsonProperty("entityIds")]
-      public uint[] EntityIds;
-    }
-
-    [Flags]
-    public enum AuthGroupFlag
-    {
-      TurretsLocked = 1
-    }
-  }
-}
-﻿namespace Oxide.Plugins
-{
-  using System;
-  using System.Collections.Generic;
-  using System.Linq;
-
-  public partial class AuthGroups : RustPlugin
-  {
-    class AuthGroupManager
-    {
-      List<AuthGroup> Groups = new List<AuthGroup>();
-
-      public void Init(IEnumerable<AuthGroupInfo> infos)
-      {
-        foreach (AuthGroupInfo info in infos)
-        {
-          Groups.Add(new AuthGroup {
-            Name = info.Name,
-            OwnerId = info.OwnerId,
-            Flags = info.Flags,
-            MemberIds = new HashSet<string>(info.MemberIds),
-            ManagerIds = new HashSet<string>(info.ManagerIds),
-            Entities = new HashSet<ManagedEntity>(FindEntities(info.EntityIds).Select(ManagedEntity.Create))
-          });
-        }
-      }
-
-      public AuthGroup GetByOwnerOrManager(BasePlayer player, string name)
-      {
-        return GetAllByOwnerOrManager(player).FirstOrDefault(group => String.Compare(group.Name, name, true) == 0);
-      }
-
-      public AuthGroup[] GetAllByOwnerOrManager(BasePlayer player)
-      {
-        return Groups.Where(group => group.HasOwner(player) || group.HasManager(player)).ToArray();
-      }
-
-      public AuthGroup[] GetAllByMember(BasePlayer player)
-      {
-        return Groups.Where(group => group.HasMember(player)).ToArray();
-      }
-
-      public AuthGroup[] GetAllByEntity(BaseEntity entity)
-      {
-        return Groups.Where(group => group.HasEntity(entity)).ToArray();
-      }
-
-      public AuthGroup Create(BasePlayer owner, string name)
-      {
-        if (GetByOwnerOrManager(owner, name) != null)
-          throw new InvalidOperationException($"Player ${owner.userID} is already the manager of an auth group named {name}!");
-
-        var group = new AuthGroup(owner, name);
-        Groups.Add(group);
-
-        return group;
-      }
-
-      public void Delete(AuthGroup group)
-      {
-        group.DeauthorizeAll();
-        Groups.Remove(group);
-      }
-
-      public AuthGroupInfo[] Serialize()
-      {
-        return Groups.Select(group => group.Serialize()).ToArray();
-      }
-
-      IEnumerable<BaseEntity> FindEntities(IEnumerable<uint> ids)
-      {
-        return ids.Select(FindEntity).Where(entity => entity != null);
-      }
-
-      BaseEntity FindEntity(uint id)
-      {
-        var entity = BaseNetworkable.serverEntities.Find(id) as BaseEntity;
-
-        if (entity == null)
-          Instance.PrintWarning($"Couldn't find entity {id} for an auth group!");
-
-        return entity;
-      }
-    }
-  }
-}
-﻿namespace Oxide.Plugins
-{
-  using System;
-  using System.Linq;
-
-  public partial class AuthGroups : RustPlugin
-  {
-    public static class BasePlayerEx
-    {
-      public static BasePlayer FindByNameOrId(string searchString)
-      {
-        return FindById(searchString) ?? FindByName(searchString);
-      }
-
-      public static BasePlayer FindById(string id)
-      {
-        return BasePlayer.activePlayerList.Concat(BasePlayer.sleepingPlayerList)
-          .FirstOrDefault(p => p.UserIDString == id);
-      }
-
-      public static BasePlayer FindByName(string searchString)
-      {
-        return BasePlayer.activePlayerList.Concat(BasePlayer.sleepingPlayerList)
-          .Where(p => p.displayName.ToLowerInvariant().Contains(searchString.ToLowerInvariant()))
-          .OrderBy(p => GetLevenshteinDistance(searchString.ToLowerInvariant(), p.displayName.ToLowerInvariant()))
-          .FirstOrDefault();
-      }
-
-      static int GetLevenshteinDistance(string source, string target)
-      {
-        if (String.IsNullOrEmpty(source) && String.IsNullOrEmpty(target))
-          return 0;
-
-        if (source.Length == target.Length)
-          return source.Length;
-
-        if (source.Length == 0)
-          return target.Length;
-
-        if (target.Length == 0)
-          return source.Length;
-
-        var distance = new int[source.Length + 1, target.Length + 1];
-
-        for (int idx = 0; idx <= source.Length; distance[idx, 0] = idx++) ;
-        for (int idx = 0; idx <= target.Length; distance[0, idx] = idx++) ;
-
-        for (int i = 1; i <= source.Length; i++)
-        {
-          for (int j = 1; j <= target.Length; j++)
-          {
-            int cost = target[j - 1] == source[i - 1] ? 0 : 1;
-            distance[i, j] = Math.Min(
-              Math.Min(distance[i - 1, j] + 1, distance[i, j - 1] + 1),
-              distance[i - 1, j - 1] + cost
-            );
-          }
-        }
-
-        return distance[source.Length, target.Length];
-      }
-    }
-  }
-}
-﻿namespace Oxide.Plugins
-{
-  public partial class AuthGroups : RustPlugin
-  {
-    static class Messages
-    {
-      public const string YouAreNotOwnerOrManagerOfGroup = "You are not the owner or manager of an auth group named <color=#ffd479>{0}</color>.";
-      public const string NoSuchPlayer = "No player with the name or id <color=#ffd479>{0}</color> was found.";
-      public const string InteractionCanceled = "Command canceled.";
-      public const string InvalidEntitySelected = "That item cannot be added to an auth group.";
-
-      public const string CannotCreateGroupOneAlreadyExists = "You are already the manager of an auth group named <color=#ffd479>{0}</color>!";
-      public const string GroupCreated = "You have created the auth group <color=#ffd479>{0}</color>.";
-      public const string GroupDeleted = "You have deleted the auth group <color=#ffd479>{0}</color>. The auth lists of all items in the group have been cleared.";
-
-      public const string MemberAdded = "You have added <color=#ffd479>{0}</color> as a member of the auth group <color=#ffd479>{1}</color>.";
-      public const string MemberRemoved = "You have removed <color=#ffd479>{0}</color> as a member of the auth group <color=#ffd479>{1}</color>.";
-      public const string ManagerAdded = "You have added <color=#ffd479>{0}</color> as a manager of the auth group <color=#ffd479>{1}</color>.";
-      public const string ManagerRemoved = "You have removed <color=#ffd479>{0}</color> as a manager of the auth group <color=#ffd479>{1}</color>.";
-      public const string CannotAddMemberAlreadyMemberOfGroup = "The player <color=#ffd479>{0}</color> is already a member of the auth group <color=#ffd479>{1}</color>.";
-      public const string CannotRemoveMemberNotMemberOfGroup = "The player <color=#ffd479>{0}</color> is not a member of the auth group <color=#ffd479>{1}</color>.";
-      public const string CannotPromoteNotMemberOfGroup = "The player <color=#ffd479>{0}</color> is not a member of the auth group <color=#ffd479>{1}</color>.";
-      public const string CannotPromoteAlreadyManagerOfGroup = "The player <color=#ffd479>{0}</color> is already a manager of the auth group <color=#ffd479>{1}</color>.";
-      public const string CannotDemoteNotManagerOfGroup = "The player <color=#ffd479>{0}</color> is not a manager of the auth group <color=#ffd479>{1}</color>.";
-      public const string CannotPromoteIsOwnerOfGroup = "The player <color=#ffd479>{0}</color> is the already the owner of the auth group <color=#ffd479>{1}</color>.";
-      public const string CannotDemoteIsOwnerOfGroup = "The player <color=#ffd479>{0}</color> cannot be demoted, since they are the owner of the auth group <color=#ffd479>{1}</color>.";
-
-      public const string SelectEntityToAddToGroup = "Use the hammer to select a tool cupboard or auto turret to add to the auth group <color=#ffd479>{0}</color>. Say <color=#ffd479>/ag</color> to cancel.";
-      public const string SelectEntityToRemoveFromGroup = "Use the hammer to select a tool cupboard or auto turret to remove from the auth group <color=#ffd479>{0}</color>. Say <color=#ffd479>/ag</color> to cancel.";
-
-      public const string EntityAdded = "You have added this item to the auth group <color=#ffd479>{0}</color>. <color=#ffd479>{1}</color> members have been authorized.";
-      public const string EntityRemoved = "You have removed this item from the auth group <color=#ffd479>{0}</color>, and its auth list has been cleared.";
-      public const string GroupSynchronized = "The auth list of all items in the group <color=#ffd479>{0}</color> has been cleared, and the <color=#ffd479>{1}</color> members of the group have been re-added.";
-
-      public const string CannotSendTurretsCommandNoTurretsInGroup = "There are no turrets in the group <color=#ffd479>{0}</color>!";
-      public const string AllTurretsSetOn = "All turrets in the auth group <color=#ffd479>{0}</color> have been turned on.";
-      public const string AllTurretsSetOff = "All turrets in the auth group <color=#ffd479>{0}</color> have been turned off.";
-      public const string AllTurretsSetHostile = "All turrets in the auth group <color=#ffd479>{0}</color> have been turned hostile.";
-      public const string AllTurretsSetPeacekeeper = "All turrets in the auth group <color=#ffd479>{0}</color> have been turned to peacekeeper mode.";
-      public const string AllTurretsLocked = "All turrets in the group <color=#ffd479>{0}</color> are now locked, and will only be accessible by group managers.";
-      public const string AllTurretsUnlocked = "All turrets in the group <color=#ffd479>{0}</color> are now unlocked.";
-
-      public const string CannotSendLocksCommandNoLocksInGroup = "There are no codelocks in the group <color=#ffd479>{0}</color>!";
-      public const string AllLocksCodeChanged = "The code for all codelocks in the auth group <color=#ffd479>{0}</color> has been changed.";
-      public const string AllLocksGuestCodeChanged = "The guest code for all codelocks in the auth group <color=#ffd479>{0}</color> has been changed.";
-      public const string AllLocksLocked = "All codelocks in the auth group <color=#ffd479>{0}</color> have been locked.";
-      public const string AllLocksUnlocked = "All codelocks in the auth group <color=#ffd479>{0}</color> have been unlocked.";
-
-      public const string CannotAddEntityNotAuthorized = "You must be authorized on the item to add it to the auth group.";
-      public const string CannotAddEntityAlreadyEnrolledInGroup = "That item is already enrolled in the auth group <color=#ffd479>{0}</color>.";
-      public const string CannotRemoveEntityNotAuthorized = "You must be authorized on the item to remove it from the auth group.";
-      public const string CannotRemoveEntityNotEnrolledInGroup = "That item is not enrolled in the auth group <color=#ffd479>{0}</color>.";
     }
   }
 }
@@ -1259,6 +791,474 @@ namespace Oxide.Plugins
       sb.AppendLine("  <color=#ffd479>/ag NAME turrets lock|unlock</color> Restrict opening or authing on turrets to group managers only");
 
       SendReply(player, sb.ToString());
+    }
+  }
+}
+﻿namespace Oxide.Plugins
+{
+  using System;
+  using System.Collections.Generic;
+  using System.Linq;
+  using Newtonsoft.Json;
+  using Newtonsoft.Json.Converters;
+
+  public partial class AuthGroups : RustPlugin
+  {
+    class AuthGroup
+    {
+      public string Name;
+      public string OwnerId;
+      public HashSet<string> MemberIds;
+      public HashSet<string> ManagerIds;
+      public HashSet<ManagedEntity> Entities;
+      public AuthGroupFlag Flags;
+
+      public AuthGroup()
+      {
+        MemberIds = new HashSet<string>();
+        ManagerIds = new HashSet<string>();
+        Entities = new HashSet<ManagedEntity>();
+      }
+
+      public AuthGroup(BasePlayer owner, string name)
+        : this()
+      {
+        OwnerId = owner.UserIDString;
+        Name = name;
+      }
+
+      public bool AddMember(BasePlayer player)
+      {
+        return AddMember(player.UserIDString);
+      }
+
+      public bool AddMember(string playerId)
+      {
+        if (HasMember(playerId))
+          return false;
+
+        MemberIds.Add(playerId);
+
+        BasePlayer player = BasePlayer.Find(playerId);
+        if (player != null)
+          EnsureAuthorized(player);
+
+        return true;
+      }
+
+      public bool RemoveMember(BasePlayer player)
+      {
+        return RemoveMember(player.UserIDString);
+      }
+
+      public bool RemoveMember(string playerId)
+      {
+        if (HasOwner(playerId))
+          throw new InvalidOperationException($"Cannot remove player {playerId} from auth group, since they are the owner");
+
+        if (!HasMember(playerId))
+          return false;
+
+        MemberIds.Remove(playerId);
+        ManagerIds.Remove(playerId);
+
+        BasePlayer player = BasePlayer.Find(playerId);
+        if (player != null)
+          EnsureDeauthorized(player);
+
+        return true;
+      }
+
+      public bool Promote(BasePlayer player)
+      {
+        return Promote(player.UserIDString);
+      }
+
+      public bool Promote(string playerId)
+      {
+        if (!MemberIds.Contains(playerId))
+          throw new InvalidOperationException($"Cannot promote player {playerId} in group {Name} owned by {OwnerId}, since they are not a member");
+
+        return ManagerIds.Add(playerId);
+      }
+
+      public bool Demote(BasePlayer player)
+      {
+        return Demote(player.UserIDString);
+      }
+
+      public bool Demote(string playerId)
+      {
+        if (!MemberIds.Contains(playerId))
+          throw new InvalidOperationException($"Cannot demote player {playerId} in group {Name} owned by {OwnerId}, since they are not a member");
+
+        return ManagerIds.Remove(playerId);
+      }
+
+      public bool AddEntity(ManagedEntity entity)
+      {
+        if (Entities.Any(e => e.Id == entity.Id))
+          return false;
+
+        Entities.Add(entity);
+
+        entity.DeauthorizeAll();
+        entity.Authorize(GetActiveAndSleepingMembers());
+
+        return true;
+      }
+
+      public bool RemoveEntity(ManagedEntity entity)
+      {
+        if (!Entities.Remove(entity))
+          return false;
+
+        entity.DeauthorizeAll();
+        return true;
+      }
+
+      public bool RemoveEntity(BaseEntity entity)
+      {
+        ManagedEntity managedEntity = GetManagedEntity(entity);
+
+        if (managedEntity == null)
+          return false;
+
+        return RemoveEntity(managedEntity);
+      }
+
+      public void EnsureAuthorized(BasePlayer player)
+      {
+        foreach (ManagedEntity entity in Entities.Where(entity => !entity.IsAuthorized(player)))
+          entity.Authorize(player);
+      }
+
+      public void EnsureDeauthorized(BasePlayer player)
+      {
+        foreach (ManagedEntity entity in Entities.Where(entity => entity.IsAuthorized(player)))
+          entity.Deauthorize(player);
+      }
+
+      public void SynchronizeAll()
+      {
+        foreach (ManagedEntity entity in Entities)
+          entity.SetAuthorizedPlayers(GetActiveAndSleepingMembers());
+      }
+
+      public void DeauthorizeAll()
+      {
+        foreach (ManagedEntity entity in Entities)
+          entity.DeauthorizeAll();
+      }
+
+      public ManagedEntity GetManagedEntity(BaseEntity entity)
+      {
+        return Entities.FirstOrDefault(e => e.Id == entity.net.ID);
+      }
+
+      public BasePlayer[] GetActiveAndSleepingMembers()
+      {
+        return MemberIds.Select(id => BasePlayer.Find(id)).Where(p => p != null).ToArray();
+      }
+
+      public T[] GetAllManagedEntitiesOfType<T>() where T : ManagedEntity
+      {
+        return Entities.OfType<T>().ToArray();
+      }
+
+      public bool HasMember(BasePlayer basePlayer)
+      {
+        return HasMember(basePlayer.UserIDString);
+      }
+
+      public bool HasMember(string playerId)
+      {
+        return MemberIds.Contains(playerId);
+      }
+
+      public bool HasManager(BasePlayer basePlayer)
+      {
+        return HasManager(basePlayer.UserIDString);
+      }
+
+      public bool HasManager(string playerId)
+      {
+        return ManagerIds.Contains(playerId);
+      }
+
+      public bool HasOwner(BasePlayer basePlayer)
+      {
+        return HasOwner(basePlayer.UserIDString);
+      }
+
+      public bool HasOwner(string playerId)
+      {
+        return OwnerId == playerId;
+      }
+
+      public bool HasEntity(BaseEntity entity)
+      {
+        return GetManagedEntity(entity) != null;
+      }
+      
+      public bool HasFlag(AuthGroupFlag flag)
+      {
+        return (Flags & flag) != 0;
+      }
+
+      public void AddFlag(AuthGroupFlag flag)
+      {
+        Flags |= flag;
+      }
+
+      public void RemoveFlag(AuthGroupFlag flag)
+      {
+        Flags &= ~flag;
+      }
+
+      public AuthGroupInfo Serialize()
+      {
+        return new AuthGroupInfo {
+          Name = Name,
+          OwnerId = OwnerId,
+          Flags = Flags,
+          ManagerIds = ManagerIds.ToArray(),
+          MemberIds = MemberIds.ToArray(),
+          EntityIds = Entities.Select(entity => entity.Id).ToArray()
+        };
+      }
+    }
+
+    public class AuthGroupInfo
+    {
+      [JsonProperty("name")]
+      public string Name;
+
+      [JsonProperty("ownerId")]
+      public string OwnerId;
+
+      [JsonProperty("flags"), JsonConverter(typeof(StringEnumConverter))]
+      public AuthGroupFlag Flags;
+
+      [JsonProperty("memberIds")]
+      public string[] MemberIds;
+
+      [JsonProperty("managerIds")]
+      public string[] ManagerIds;
+
+      [JsonProperty("entityIds")]
+      public uint[] EntityIds;
+    }
+
+    [Flags]
+    public enum AuthGroupFlag
+    {
+      TurretsLocked = 1
+    }
+  }
+}
+﻿namespace Oxide.Plugins
+{
+  using System;
+  using System.Collections.Generic;
+  using System.Linq;
+
+  public partial class AuthGroups : RustPlugin
+  {
+    class AuthGroupManager
+    {
+      List<AuthGroup> Groups = new List<AuthGroup>();
+
+      public void Init(IEnumerable<AuthGroupInfo> infos)
+      {
+        foreach (AuthGroupInfo info in infos)
+        {
+          Groups.Add(new AuthGroup {
+            Name = info.Name,
+            OwnerId = info.OwnerId,
+            Flags = info.Flags,
+            MemberIds = new HashSet<string>(info.MemberIds),
+            ManagerIds = new HashSet<string>(info.ManagerIds),
+            Entities = new HashSet<ManagedEntity>(FindEntities(info.EntityIds).Select(ManagedEntity.Create))
+          });
+        }
+      }
+
+      public AuthGroup GetByOwnerOrManager(BasePlayer player, string name)
+      {
+        return GetAllByOwnerOrManager(player).FirstOrDefault(group => String.Compare(group.Name, name, true) == 0);
+      }
+
+      public AuthGroup[] GetAllByOwnerOrManager(BasePlayer player)
+      {
+        return Groups.Where(group => group.HasOwner(player) || group.HasManager(player)).ToArray();
+      }
+
+      public AuthGroup[] GetAllByMember(BasePlayer player)
+      {
+        return Groups.Where(group => group.HasMember(player)).ToArray();
+      }
+
+      public AuthGroup[] GetAllByEntity(BaseEntity entity)
+      {
+        return Groups.Where(group => group.HasEntity(entity)).ToArray();
+      }
+
+      public AuthGroup Create(BasePlayer owner, string name)
+      {
+        if (GetByOwnerOrManager(owner, name) != null)
+          throw new InvalidOperationException($"Player ${owner.userID} is already the manager of an auth group named {name}!");
+
+        var group = new AuthGroup(owner, name);
+        Groups.Add(group);
+
+        return group;
+      }
+
+      public void Delete(AuthGroup group)
+      {
+        group.DeauthorizeAll();
+        Groups.Remove(group);
+      }
+
+      public AuthGroupInfo[] Serialize()
+      {
+        return Groups.Select(group => group.Serialize()).ToArray();
+      }
+
+      IEnumerable<BaseEntity> FindEntities(IEnumerable<uint> ids)
+      {
+        return ids.Select(FindEntity).Where(entity => entity != null);
+      }
+
+      BaseEntity FindEntity(uint id)
+      {
+        var entity = BaseNetworkable.serverEntities.Find(id) as BaseEntity;
+
+        if (entity == null)
+          Instance.PrintWarning($"Couldn't find entity {id} for an auth group!");
+
+        return entity;
+      }
+    }
+  }
+}
+﻿namespace Oxide.Plugins
+{
+  using System;
+  using System.Linq;
+
+  public partial class AuthGroups : RustPlugin
+  {
+    public static class BasePlayerEx
+    {
+      public static BasePlayer FindByNameOrId(string searchString)
+      {
+        return FindById(searchString) ?? FindByName(searchString);
+      }
+
+      public static BasePlayer FindById(string id)
+      {
+        return BasePlayer.activePlayerList.Concat(BasePlayer.sleepingPlayerList)
+          .FirstOrDefault(p => p.UserIDString == id);
+      }
+
+      public static BasePlayer FindByName(string searchString)
+      {
+        return BasePlayer.activePlayerList.Concat(BasePlayer.sleepingPlayerList)
+          .Where(p => p.displayName.ToLowerInvariant().Contains(searchString.ToLowerInvariant()))
+          .OrderBy(p => GetLevenshteinDistance(searchString.ToLowerInvariant(), p.displayName.ToLowerInvariant()))
+          .FirstOrDefault();
+      }
+
+      static int GetLevenshteinDistance(string source, string target)
+      {
+        if (String.IsNullOrEmpty(source) && String.IsNullOrEmpty(target))
+          return 0;
+
+        if (source.Length == target.Length)
+          return source.Length;
+
+        if (source.Length == 0)
+          return target.Length;
+
+        if (target.Length == 0)
+          return source.Length;
+
+        var distance = new int[source.Length + 1, target.Length + 1];
+
+        for (int idx = 0; idx <= source.Length; distance[idx, 0] = idx++) ;
+        for (int idx = 0; idx <= target.Length; distance[0, idx] = idx++) ;
+
+        for (int i = 1; i <= source.Length; i++)
+        {
+          for (int j = 1; j <= target.Length; j++)
+          {
+            int cost = target[j - 1] == source[i - 1] ? 0 : 1;
+            distance[i, j] = Math.Min(
+              Math.Min(distance[i - 1, j] + 1, distance[i, j - 1] + 1),
+              distance[i - 1, j - 1] + cost
+            );
+          }
+        }
+
+        return distance[source.Length, target.Length];
+      }
+    }
+  }
+}
+﻿namespace Oxide.Plugins
+{
+  public partial class AuthGroups : RustPlugin
+  {
+    static class Messages
+    {
+      public const string YouAreNotOwnerOrManagerOfGroup = "You are not the owner or manager of an auth group named <color=#ffd479>{0}</color>.";
+      public const string NoSuchPlayer = "No player with the name or id <color=#ffd479>{0}</color> was found.";
+      public const string InteractionCanceled = "Command canceled.";
+      public const string InvalidEntitySelected = "That item cannot be added to an auth group.";
+
+      public const string CannotCreateGroupOneAlreadyExists = "You are already the manager of an auth group named <color=#ffd479>{0}</color>!";
+      public const string GroupCreated = "You have created the auth group <color=#ffd479>{0}</color>.";
+      public const string GroupDeleted = "You have deleted the auth group <color=#ffd479>{0}</color>. The auth lists of all items in the group have been cleared.";
+
+      public const string MemberAdded = "You have added <color=#ffd479>{0}</color> as a member of the auth group <color=#ffd479>{1}</color>.";
+      public const string MemberRemoved = "You have removed <color=#ffd479>{0}</color> as a member of the auth group <color=#ffd479>{1}</color>.";
+      public const string ManagerAdded = "You have added <color=#ffd479>{0}</color> as a manager of the auth group <color=#ffd479>{1}</color>.";
+      public const string ManagerRemoved = "You have removed <color=#ffd479>{0}</color> as a manager of the auth group <color=#ffd479>{1}</color>.";
+      public const string CannotAddMemberAlreadyMemberOfGroup = "The player <color=#ffd479>{0}</color> is already a member of the auth group <color=#ffd479>{1}</color>.";
+      public const string CannotRemoveMemberNotMemberOfGroup = "The player <color=#ffd479>{0}</color> is not a member of the auth group <color=#ffd479>{1}</color>.";
+      public const string CannotPromoteNotMemberOfGroup = "The player <color=#ffd479>{0}</color> is not a member of the auth group <color=#ffd479>{1}</color>.";
+      public const string CannotPromoteAlreadyManagerOfGroup = "The player <color=#ffd479>{0}</color> is already a manager of the auth group <color=#ffd479>{1}</color>.";
+      public const string CannotDemoteNotManagerOfGroup = "The player <color=#ffd479>{0}</color> is not a manager of the auth group <color=#ffd479>{1}</color>.";
+      public const string CannotPromoteIsOwnerOfGroup = "The player <color=#ffd479>{0}</color> is the already the owner of the auth group <color=#ffd479>{1}</color>.";
+      public const string CannotDemoteIsOwnerOfGroup = "The player <color=#ffd479>{0}</color> cannot be demoted, since they are the owner of the auth group <color=#ffd479>{1}</color>.";
+
+      public const string SelectEntityToAddToGroup = "Use the hammer to select a tool cupboard or auto turret to add to the auth group <color=#ffd479>{0}</color>. Say <color=#ffd479>/ag</color> to cancel.";
+      public const string SelectEntityToRemoveFromGroup = "Use the hammer to select a tool cupboard or auto turret to remove from the auth group <color=#ffd479>{0}</color>. Say <color=#ffd479>/ag</color> to cancel.";
+
+      public const string EntityAdded = "You have added this item to the auth group <color=#ffd479>{0}</color>. <color=#ffd479>{1}</color> members have been authorized.";
+      public const string EntityRemoved = "You have removed this item from the auth group <color=#ffd479>{0}</color>, and its auth list has been cleared.";
+      public const string GroupSynchronized = "The auth list of all items in the group <color=#ffd479>{0}</color> has been cleared, and the <color=#ffd479>{1}</color> members of the group have been re-added.";
+
+      public const string CannotSendTurretsCommandNoTurretsInGroup = "There are no turrets in the group <color=#ffd479>{0}</color>!";
+      public const string AllTurretsSetOn = "All turrets in the auth group <color=#ffd479>{0}</color> have been turned on.";
+      public const string AllTurretsSetOff = "All turrets in the auth group <color=#ffd479>{0}</color> have been turned off.";
+      public const string AllTurretsSetHostile = "All turrets in the auth group <color=#ffd479>{0}</color> have been turned hostile.";
+      public const string AllTurretsSetPeacekeeper = "All turrets in the auth group <color=#ffd479>{0}</color> have been turned to peacekeeper mode.";
+      public const string AllTurretsLocked = "All turrets in the group <color=#ffd479>{0}</color> are now locked, and will only be accessible by group managers.";
+      public const string AllTurretsUnlocked = "All turrets in the group <color=#ffd479>{0}</color> are now unlocked.";
+
+      public const string CannotSendLocksCommandNoLocksInGroup = "There are no codelocks in the group <color=#ffd479>{0}</color>!";
+      public const string AllLocksCodeChanged = "The code for all codelocks in the auth group <color=#ffd479>{0}</color> has been changed.";
+      public const string AllLocksGuestCodeChanged = "The guest code for all codelocks in the auth group <color=#ffd479>{0}</color> has been changed.";
+      public const string AllLocksLocked = "All codelocks in the auth group <color=#ffd479>{0}</color> have been locked.";
+      public const string AllLocksUnlocked = "All codelocks in the auth group <color=#ffd479>{0}</color> have been unlocked.";
+
+      public const string CannotAddEntityNotAuthorized = "You must be authorized on the item to add it to the auth group.";
+      public const string CannotAddEntityAlreadyEnrolledInGroup = "That item is already enrolled in the auth group <color=#ffd479>{0}</color>.";
+      public const string CannotRemoveEntityNotAuthorized = "You must be authorized on the item to remove it from the auth group.";
+      public const string CannotRemoveEntityNotEnrolledInGroup = "That item is not enrolled in the auth group <color=#ffd479>{0}</color>.";
     }
   }
 }
